@@ -1,20 +1,23 @@
 package com.example.url_shortener.controller;
-
+import com.example.url_shortener.dto.AnalyticsResponseDTO;
+import com.example.url_shortener.dto.UrlResponseDTO;
+import com.example.url_shortener.dto.UrlRequestDTO;
+import com.example.url_shortener.service.UrlService;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
-import java.util.UUID;
 
 @RestController
+@RequestMapping("/api/url")
 public class HomeController {
-    HashMap<String,String> urlMap = new HashMap<>();
+    private UrlService urlService;
+
+    public HomeController(UrlService urlService){
+        this.urlService = urlService;
+    }
 
 
     @GetMapping("/")
@@ -23,30 +26,53 @@ public class HomeController {
     }
 
 
-    @GetMapping("/shortener")
-    public String shortener(@RequestParam String url) {
+    @PostMapping("/shorten")
+    public UrlResponseDTO shortener(@Valid @RequestBody UrlRequestDTO request) {
 
-        UUID randomId = UUID.randomUUID();
-        String uuid = randomId.toString();
-        String shortCode = uuid.substring(0,6);
+        String originalUrl = request.getOriginalUrl();
 
-        urlMap.put(shortCode,url);
-        System.out.println(urlMap);
+        String shortCode;
 
-        return "You entered:\n" + url
-                +"\n Status: \n" + "Received Successfully!"
-                +"\n Short Code: \n" + shortCode;
+        if (request.getCustomAlias() != null &&
+                !request.getCustomAlias().isBlank()) {
+
+            shortCode = request.getCustomAlias();
+
+        } else {
+
+            shortCode = urlService.generateShortCode();
+
+        }
+
+        UrlResponseDTO response =
+                urlService.saveUrl(
+                        shortCode,
+                        originalUrl,
+                        request.getExpiresAt()
+                );
+
+
+        response.setShortUrl("http://localhost:8080/"+ response.getShortCode());
+
+        return response;
     }
 
     @GetMapping("/{shortCode}")
     public ResponseEntity<Void> redirect(@PathVariable String shortCode ){
-        String originalUrl = urlMap.get(shortCode);
-        if(originalUrl == null){
-            return ResponseEntity.notFound().build();
-        }
+        String originalUrl = urlService.getOriginalUrl(shortCode);
+
         return ResponseEntity.status(HttpStatus.FOUND)
                 .header(HttpHeaders.LOCATION,originalUrl)
                 .build();
+    }
+
+    @GetMapping("/analytics/{shortCode}")
+    public ResponseEntity<AnalyticsResponseDTO> getAnalytics(
+            @PathVariable String shortCode) {
+
+        return ResponseEntity.ok(
+                urlService.getAnalytics(shortCode)
+        );
     }
 
 
